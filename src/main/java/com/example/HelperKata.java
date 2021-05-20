@@ -16,22 +16,21 @@ import java.util.stream.Stream;
 
 public class HelperKata {
     private static final  String EMPTY_STRING = "";
-    private static String ANTERIOR_BONO = null;
+    private static String anteriorBono = null;
+
+    private HelperKata() {
+    }
 
     public static Flux<CouponDetailDto> getListFromBase64File(final String fileBase64) {
-        return getCouponDetailDtoFlux(createFluxFrom(fileBase64));
-    }
-
-    private static Flux<CouponDetailDto> getCouponDetailDtoFlux(Flux<String> fileBase64) {
         AtomicInteger counter = new AtomicInteger(0);
-        String characterSeparated = FileCSVEnum.CHARACTER_DEFAULT.getId();
         Set<String> codes = new HashSet<>();
-        return          fileBase64
-                        .map(line -> getTupleOfLine(line, line.split(characterSeparated), characterSeparated))
-                        .map(tuple -> getCouponDetailDto(counter, codes, tuple));
+        return          createFluxFrom(fileBase64)
+                        .map(line -> getTupleOfLine(line, line.split(FileCSVEnum.CHARACTER_DEFAULT.getId()), FileCSVEnum.CHARACTER_DEFAULT.getId()))
+                        .map(tuple ->
+                            getCouponDetailDto(counter, codes, tuple));
     }
 
-    private static CouponDetailDto getCouponDetailDto(AtomicInteger counter, Set<String> codes, Tuple2<String, String> tuple) {
+    private static CouponDetailDto getCouponDetailDto(AtomicInteger counter, Set<String> codes,  Tuple2<String, String> tuple) {
         String dateValidated = null;
         String errorMessage = null;
 
@@ -43,12 +42,14 @@ public class HelperKata {
             errorMessage = ExperienceErrorsEnum.FILE_ERROR_DATE_PARSE.toString();
         } else if (validateDateIsMinor(tuple.getT2())) {
             errorMessage = ExperienceErrorsEnum.FILE_DATE_IS_MINOR_OR_EQUALS.toString();
-        } else {
-           dateValidated = tuple.getT2();
-        }
+        } else
+            dateValidated = tuple.getT2();
+        return getCouponDetailDto(counter, tuple, dateValidated, errorMessage);
+    }
 
+    private static CouponDetailDto getCouponDetailDto(AtomicInteger counter, Tuple2<String, String> tuple, String dateValidated, String errorMessage) {
         return CouponDetailDto.aCouponDetailDto()
-                .withCode(evaluacionesDelBonoAnterior(tuple.getT1()))
+                .withCode(anteriorBono == null || anteriorBono.equals("") ? bonoVacioONullo(tuple.getT1()) : bonoAnteriorIgualODiferenteAlEnviado(tuple.getT1()))
                 .withDueDate(dateValidated)
                 .withNumberLine(counter.incrementAndGet())
                 .withMessageError(errorMessage)
@@ -56,17 +57,13 @@ public class HelperKata {
                 .build();
     }
 
-    private static String evaluacionesDelBonoAnterior(String bonoEnviado){
-        return (ANTERIOR_BONO == null || ANTERIOR_BONO.equals("")) ? bonoVacioONullo(bonoEnviado) : bonoAnteriorIgualODiferenteAlEnviado(bonoEnviado);
-    }
-
     private static String bonoVacioONullo(String bonoEnviado){
-        ANTERIOR_BONO = typeBono(bonoEnviado);
-        return  (ANTERIOR_BONO == "") ? null : bonoEnviado;
+        anteriorBono = typeBono(bonoEnviado);
+        return  (anteriorBono.equals("")) ? null : bonoEnviado;
     }
 
     private static String bonoAnteriorIgualODiferenteAlEnviado(String bonoEnviado){
-        return (ANTERIOR_BONO.equals(typeBono(bonoEnviado))) ? bonoEnviado : null;
+        return (anteriorBono.equals(typeBono(bonoEnviado))) ? bonoEnviado : null;
     }
 
     private static Flux<String> createFluxFrom(String fileBase64) {
@@ -80,9 +77,9 @@ public class HelperKata {
     }
 
     private static String typeBono(String bonoIn) {
-        return  bonoCharacterAndLength(bonoIn)
-                ? ValidateCouponEnum.EAN_13.getTypeOfEnum()
-                : bonoStartWithAndLength(bonoIn)
+        if (bonoCharacterAndLength(bonoIn)){
+            return ValidateCouponEnum.EAN_13.getTypeOfEnum();
+        }return bonoStartWithAndLength(bonoIn)
                 ? ValidateCouponEnum.EAN_39.getTypeOfEnum()
                 : ValidateCouponEnum.ALPHANUMERIC.getTypeOfEnum();
     }
@@ -117,13 +114,13 @@ public class HelperKata {
     }
 
     private static Tuple2<String, String> getTupleOfLine(String line, String[] array, String characterSeparated) {
-        return  arrayCheck(array)
-                ? Tuples.of(EMPTY_STRING, EMPTY_STRING)
-                : lengthArray(array , 2)
-                ? lineStartWith(characterSeparated, line)
-                ? Tuples.of(EMPTY_STRING, array[0])
-                : Tuples.of(array[0], EMPTY_STRING)
-                : Tuples.of(array[0], array[1]);
+        if (arrayCheck(array)){
+            return Tuples.of(EMPTY_STRING, EMPTY_STRING);
+        } else if (lengthArray(array , 2)){
+            if(lineStartWith(characterSeparated, line)){
+                return Tuples.of(EMPTY_STRING, array[0]);
+            }return Tuples.of(array[0], EMPTY_STRING);
+        }return Tuples.of(array[0], array[1]);
     }
 
     private static boolean arrayCheck(String[] array){
